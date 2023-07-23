@@ -12,8 +12,75 @@
 
 VM vm;
 
+static void runtimeError(const char* format, ...);
+
 static Value clockNative(int argCount, Value* args) {
     return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
+}
+
+static Value toStringNative(int argCount, Value* args) {
+    if (argCount != 1) {
+        runtimeError("Expected 1 argument but got %d", argCount);
+        return NIL_VAL;
+    }
+
+    Value value = args[0];
+    ObjString* result;
+
+    if (IS_BOOL(value)) {
+        result = AS_BOOL(value) == TRUE_VAL ? copyString("true", 5) : copyString("false", 6);
+    }
+
+    if (IS_NIL(value)) {
+        result = copyString("nil", 4);
+    }
+
+    if (IS_NUMBER(value)) {
+        char buf[100];
+        snprintf(buf, 100, "%g", AS_NUMBER(value));
+        result = copyString(buf, strlen(buf));
+    }
+
+    if (IS_OBJ(value)) {
+        switch (OBJ_TYPE(value)) {
+            case OBJ_BOUND_METHOD:
+                result = AS_BOUND_METHOD(value)->method->function->name;
+                result = copyString(result->chars, result->length);
+                break;
+            case OBJ_CLASS:
+                result = AS_CLASS(value)->name;
+                result = copyString(result->chars, result->length);
+                break;
+            case OBJ_CLOSURE:
+                result = AS_CLOSURE(value)->function->name;
+                result = copyString(result->chars, result->length);
+                break;
+            case OBJ_FUNCTION:
+                result = AS_FUNCTION(value)->name;
+                result = copyString(result->chars, result->length);
+                break;
+            case OBJ_INSTANCE:
+                ObjString* className = AS_INSTANCE(value)->klass->name;
+                result = copyString(className->chars, className->length + 9);
+                char instanceString[12] = " instance";
+                for (int i = 0; i < 12; i++)
+                {
+                    result->chars[className->length + i] = instanceString[i];
+                }
+                break;
+            case OBJ_NATIVE:
+                result = copyString("<native fn>", 12);
+                break;
+            case OBJ_STRING:
+                result = copyString(AS_STRING(value)->chars, AS_STRING(value)->length);
+                break;
+            case OBJ_UPVALUE:
+                result = copyString("upvalue", 8);
+                break;
+        }
+    }
+
+    return OBJ_VAL(result);
 }
 
 static void resetStack() {
@@ -70,6 +137,7 @@ void initVM() {
     vm.initString = copyString("init", 4);
 
     defineNative("clock", clockNative);
+    defineNative("toString", toStringNative);
 }
 
 void freeVM() {
